@@ -10,6 +10,8 @@ jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 10  # 延长超时时间
+    permissions:
+      contents: write 
     steps:
     - name: 检查依赖工具
       run: |
