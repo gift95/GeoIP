@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10  # 延长超时时间
     permissions:
-      contents: write 
+      contents: write  # 需写权限操作标签和Release
     steps:
     - name: 检查依赖工具
       run: |
@@ -68,11 +68,12 @@ jobs:
             exit 1
         fi
         echo "成功获取 $MMDB_COUNT 个 mmdb 文件"
-
+        # 将文件数量存入环境变量，用于Release描述
+        echo "MMDB_COUNT=$MMDB_COUNT" >> $GITHUB_ENV
         # 设置 TAG_NAME 环境变量
         echo "TAG_NAME=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
 
-    - name: 上传到 Releases
+    - name: 上传到 Releases 并标记为 Latest
       uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -80,6 +81,7 @@ jobs:
         tag_name: ${{ env.TAG_NAME }}
         body: "GeoLite.mmdb 数据库更新 - ${{ env.TAG_NAME }}\n共包含 ${{ env.MMDB_COUNT }} 个文件"
         files: upload/*.mmdb
+        make_latest: true  # 核心：将该Release标记为仓库的Latest Release
 
     - name: 清理旧 Releases
       uses: dev-drprasad/delete-older-releases@v0.2.0
@@ -88,3 +90,25 @@ jobs:
         delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 操作 latest 标签（覆盖为最新版本）
+      run: |
+        # 配置Git用户信息（操作标签需要）
+        git config --global user.name "${{ github.actor }}"
+        git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+        
+        # 克隆仓库（仅需克隆标签，浅克隆加快速度）
+        git clone --depth=1 --bare "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" repo-bare
+        cd repo-bare
+        
+        # 删除本地和远程的 latest 标签（若存在）
+        git tag -d latest 2>/dev/null || echo "本地无 latest 标签，跳过删除"
+        git push origin :refs/tags/latest 2>/dev/null || echo "远程无 latest 标签，跳过删除"
+        
+        # 基于当前最新发布标签创建 new latest 标签
+        git tag -a latest ${{ env.TAG_NAME }} -m "Latest GeoLite.mmdb release: ${{ env.TAG_NAME }}"
+        
+        # 推送 latest 标签到远程
+        git push origin latest
+        
+        echo "成功将 latest 标签关联到 ${{ env.TAG_NAME }}"
