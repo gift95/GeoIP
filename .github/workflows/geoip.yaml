@@ -87,28 +87,28 @@ jobs:
       run: |
         # 生成README.md内容（可按需自定义固定内容和动态内容）
         cat > README.md << EOF
-# GeoLite.mmdb 数据库仓库
-本仓库自动同步 MaxMind 官方的 GeoLite2 数据库，包含 ASN、国家、城市地理信息。
-
-## 📅 最新更新时间
-${{ env.TAG_NAME }}
-
-## 📁 包含的数据库文件
-共 ${MMDB_COUNT} 个文件：${MMDB_FILES}
-
-## 🚀 下载方式
-1. **Release 页面**：[最新版本](https://github.com/${{ github.repository }}/releases/tag/latest)
-2. **直接下载**：
-   - [GeoLite2-ASN.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-ASN.mmdb)
-   - [GeoLite2-Country.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-Country.mmdb)
-   - [GeoLite2-City.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-City.mmdb)
-
-## ⚙️ 自动更新
-仓库每 7 天自动从 MaxMind 官网同步最新数据库，并更新 Release 和 \`latest\` 标签。
-
-## 📄 许可证
-本仓库的数据库文件遵循 MaxMind 官方的 [GeoLite2 许可证](https://www.maxmind.com/en/geoip2-geolite2-license)。
-EOF
+          # GeoLite.mmdb 数据库仓库
+          本仓库自动同步 MaxMind 官方的 GeoLite2 数据库，包含 ASN、国家、城市地理信息。
+          
+          ## 📅 最新更新时间
+          ${{ env.TAG_NAME }}
+          
+          ## 📁 包含的数据库文件
+          共 ${MMDB_COUNT} 个文件：${MMDB_FILES}
+          
+          ## 🚀 下载方式
+          1. **Release 页面**：[最新版本](https://github.com/${{ github.repository }}/releases/tag/latest)
+          2. **直接下载**：
+             - [GeoLite2-ASN.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-ASN.mmdb)
+             - [GeoLite2-Country.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-Country.mmdb)
+             - [GeoLite2-City.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-City.mmdb)
+          
+          ## ⚙️ 自动更新
+          仓库每 7 天自动从 MaxMind 官网同步最新数据库，并更新 Release 和 \`latest\` 标签。
+          
+          ## 📄 许可证
+          本仓库的数据库文件遵循 MaxMind 官方的 [GeoLite2 许可证](https://www.maxmind.com/en/geoip2-geolite2-license)。
+          EOF
         # 检查README.md是否修改成功
         echo "查看更新后的README.md内容："
         cat README.md
