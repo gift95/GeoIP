@@ -83,29 +83,29 @@ jobs:
 
     - name: 自动更新 README.md
       run: |
-        # 修复README.md的缩进问题（原EOF内的内容有多余缩进）
+        # 修复README.md的缩进问题（移除多余空格，保证Markdown渲染正常）
         cat > README.md << EOF
-        # GeoLite.mmdb 数据库仓库
-        本仓库自动同步 MaxMind 官方的 GeoLite2 数据库，包含 ASN 和国家地理信息。
-        
-        ## 📅 最新更新时间
-        ${{ env.TAG_NAME }}
-        
-        ## 📁 包含的数据库文件
-        共 ${MMDB_COUNT} 个文件：${MMDB_FILES}
-        
-        ## 🚀 下载方式
-        1. **Release 页面**：[最新版本](https://github.com/${{ github.repository }}/releases/tag/latest)
-        2. **直接下载**：
-           - [GeoLite2-ASN.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-ASN.mmdb)
-           - [GeoLite2-Country.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-Country.mmdb)
-        
-        ## ⚙️ 自动更新
-        仓库每 7 天自动从 MaxMind 官网同步最新数据库，并更新 Release 和 \`latest\` 标签。
-        
-        ## 📄 许可证
-        本仓库的数据库文件遵循 MaxMind 官方的 [GeoLite2 许可证](https://www.maxmind.com/en/geoip2-geolite2-license)。
-        EOF
+# GeoLite.mmdb 数据库仓库
+本仓库自动同步 MaxMind 官方的 GeoLite2 数据库，包含 ASN 和国家地理信息。
+
+## 📅 最新更新时间
+${{ env.TAG_NAME }}
+
+## 📁 包含的数据库文件
+共 ${MMDB_COUNT} 个文件：${MMDB_FILES}
+
+## 🚀 下载方式
+1. **Release 页面**：[最新版本](https://github.com/${{ github.repository }}/releases/tag/latest)
+2. **直接下载**：
+   - [GeoLite2-ASN.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-ASN.mmdb)
+   - [GeoLite2-Country.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-Country.mmdb)
+
+## ⚙️ 自动更新
+仓库每 7 天自动从 MaxMind 官网同步最新数据库，并更新 Release 和 \`latest\` 标签。
+
+## 📄 许可证
+本仓库的数据库文件遵循 MaxMind 官方的 [GeoLite2 许可证](https://www.maxmind.com/en/geoip2-geolite2-license)。
+EOF
         # 检查README.md是否修改成功
         cat README.md
 
@@ -122,23 +122,15 @@ jobs:
             echo "README.md 无变更，跳过推送"
         fi
 
-    - name: 上传到 Releases 并标记为 Latest
+    - name: 为日期标签创建 Release（不标记为最新）
       uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ env.TAG_NAME }}
         body: "GeoLite.mmdb 数据库更新 - ${{ env.TAG_NAME }}\n共包含 ${{ env.MMDB_COUNT }} 个文件：${{ env.MMDB_FILES }}"
-        文件: upload/*.mmdb
-        make_latest: true  # 将该Release标记为仓库的Latest Release
-
-    - name: 清理旧 Releases
-      uses: dev-drprasad/delete-older-releases@v0.2.0
-      with:
-        keep_latest: 5
-        delete_tags: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        files: upload/*.mmdb  # 修复：将中文「文件」改为英文files
+        make_latest: false    # 该Release不标记为最新
 
     - name: 操作 latest 标签（覆盖为最新版本）
       run: |
@@ -165,9 +157,9 @@ jobs:
         git tag -d latest 2>/dev/null || echo "本地无 latest 标签，跳过删除"
         git push origin :refs/tags/latest 2>/dev/null || echo "远程无 latest 标签，跳过删除"
         
-        # 基于最新版本标签创建latest标签（轻量标签，无需注释）
+        # 基于最新版本标签创建latest标签（轻量标签）
         git tag -f latest ${{ env.TAG_NAME }}
-        # 推送latest标签
+        # 推送latest标签（强制推送确保覆盖）
         git push origin latest --force
         
         # 验证latest标签指向
@@ -176,3 +168,21 @@ jobs:
         echo "最新版本标签指向的提交："
         git rev-parse ${{ env.TAG_NAME }}
         echo "成功将 latest 标签关联到 ${{ env.TAG_NAME }}"
+
+    - name: 为 latest 标签创建 Release 并标记为最新
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: latest
+        body: "GeoLite.mmdb 数据库最新版本（${{ env.TAG_NAME }}）\n共包含 ${{ env.MMDB_COUNT }} 个文件：${{ env.MMDB_FILES }}"
+        files: upload/*.mmdb  # 修复：将中文「文件」改为英文files
+        make_latest: true     # 该Release标记为仓库的Latest Release
+
+    - name: 清理旧 Releases（保留最新5个）
+      uses: dev-drprasad/delete-older-releases@v0.2.0
+      with:
+        keep_latest: 5
+        delete_tags: true     # 同时删除旧的标签（不含latest标签，因是最后创建的）
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
