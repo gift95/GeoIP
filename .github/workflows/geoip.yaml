@@ -1,46 +1,76 @@
-#
-# Copyright (c) 2020-2021 P3TERX <https://p3terx.com>
-#
-# This is free software, licensed under the MIT License.
-# See /LICENSE for more information.
-#
-# https://github.com/P3TERX/GeoLite.mmdb
-# Description: Publish GeoLite.mmdb
-#
-
 name: Publish GeoLite.mmdb
 
 on:
   repository_dispatch:
   workflow_dispatch:
   schedule:
-    - cron: 0 1 */7 * *
+    - cron: 0 1 */7 * *  # 每7天的凌晨1点（UTC）执行
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-
+    timeout-minutes: 10  # 延长超时时间
     steps:
-    - name: Download GeoLite.mmdb
+    - name: 检查依赖工具
       run: |
-        wget --content-disposition --user=715750 --password=${{ secrets.LICENSE_KEY }} "https://download.maxmind.com/geoip/databases/GeoLite2-ASN/download?suffix=tar.gz" -O GeoLite2-ASN.tar.gz
-        if [ $? -ne 0 ]; then echo "ASN Download failed!"; exit 1; fi
-        tar zxvf GeoLite2-ASN.tar.gz
+        REQUIRED_TOOLS=("wget" "tar" "git")
+        for TOOL in "${REQUIRED_TOOLS[@]}"; do
+            if ! command -v $TOOL &> /dev/null; then
+                echo "错误: 未安装 $TOOL"
+                exit 1
+            fi
+        done
 
-        wget --content-disposition --user=715750 --password=${{ secrets.LICENSE_KEY }} "https://download.maxmind.com/geoip/databases/GeoLite2-City/download?suffix=tar.gz" -O GeoLite2-City.tar.gz
-        if [ $? -ne 0 ]; then echo "City Download failed!"; exit 1; fi
-        tar zxvf GeoLite2-City.tar.gz
-
-        wget --content-disposition --user=715750 --password=${{ secrets.LICENSE_KEY }} "https://download.maxmind.com/geoip/databases/GeoLite2-Country/download?suffix=tar.gz" -O GeoLite2-Country.tar.gz
-        if [ $? -ne 0 ]; then echo "Country Download failed!"; exit 1; fi
-        tar zxvf GeoLite2-Country.tar.gz
-
+    - name: 下载并解压 GeoLite.mmdb
+      run: |
+        DATABASES=(
+          "GeoLite2-ASN"
+          "GeoLite2-Country"
+        )
         mkdir -p upload
-        cp -v GeoLite*/*.mmdb upload
+
+        for DB in "${DATABASES[@]}"; do
+            echo "===== 处理 $DB 数据库 ====="
+            # 下载 tar.gz 文件
+            echo "正在下载 $DB 数据库..."
+            wget --content-disposition --user="715750" --password="${{ secrets.LICENSE_KEY }}" \
+              "https://download.maxmind.com/geoip/databases/$DB/download?suffix=tar.gz" \
+              -O "${DB}.tar.gz"  # 显式指定输出文件名，避免自动重命名问题
+
+            # 检查下载是否成功
+            if [ ! -f "${DB}.tar.gz" ]; then
+                echo "错误: $DB 数据库下载失败"
+                exit 1
+            fi
+
+            # 解压文件
+            echo "正在解压 ${DB}.tar.gz..."
+            tar -zxvf "${DB}.tar.gz"
+            UNPACK_DIR=$(ls -d ${DB}_* | head -n1)  # 获取解压后的目录名
+
+            # 检查解压目录是否存在
+            if [ -z "$UNPACK_DIR" ]; then
+                echo "错误: $DB 数据库解压失败"
+                exit 1
+            fi
+
+            # 精准拷贝 mmdb 文件
+            cp -v "$UNPACK_DIR"/GeoLite2-*.mmdb upload/
+            echo "===== $DB 数据库处理完成 =====\n"
+        done
+
+        # 检查是否成功获取 mmdb 文件
+        MMDB_COUNT=$(ls -1 upload/*.mmdb 2>/dev/null | wc -l)
+        if [ $MMDB_COUNT -eq 0 ]; then
+            echo "错误: 未找到任何 mmdb 文件"
+            exit 1
+        fi
+        echo "成功获取 $MMDB_COUNT 个 mmdb 文件"
+
+        # 设置 TAG_NAME 环境变量
         echo "TAG_NAME=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
 
-    - name: Push to "download" branch
+    - name: 推送到 download 分支
       run: |
         cd upload
         git init
@@ -48,23 +78,23 @@ jobs:
         git config user.email "${{ github.actor }}@users.noreply.github.com"
         git checkout -b download
         git add .
-        git commit -m "${{ env.TAG_NAME }}"
+        git commit -m "Update GeoLite.mmdb - ${{ env.TAG_NAME }}"
         git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
-        git push -f origin download
+        git push -f origin download  # 若分支仅存最新文件，强制推送合理
 
-    - name: Upload to Releases
+    - name: 上传到 Releases
       uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ env.TAG_NAME }}
-        body: ${{ env.TAG_NAME }}
+        body: "GeoLite.mmdb 数据库更新 - ${{ env.TAG_NAME }}\n共包含 ${{ env.MMDB_COUNT }} 个文件"
         files: upload/*.mmdb
 
-    - name: Remove old Releases
+    - name: 清理旧 Releases
       uses: dev-drprasad/delete-older-releases@v0.2.0
       with:
-        keep_latest: 2
+        keep_latest: 5  # 保留最新5个版本，可按需调整
         delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
