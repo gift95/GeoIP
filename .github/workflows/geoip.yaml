@@ -31,7 +31,6 @@ jobs:
 
     - name: 下载并解压 GeoLite.mmdb
       run: |
-        # 核心修改：添加 GeoLite2-City 到数据库列表
         DATABASES=(
           "GeoLite2-ASN"
           "GeoLite2-Country"
@@ -44,7 +43,7 @@ jobs:
             echo "正在下载 $DB 数据库..."
             wget --content-disposition --user="715750" --password="${{ secrets.LICENSE_KEY }}" \
               "https://download.maxmind.com/geoip/databases/$DB/download?suffix=tar.gz" \
-              -O "${DB}.tar.gz"  # 显式指定输出文件名，避免自动重命名问题
+              -O "${DB}.tar.gz"
 
             # 检查下载是否成功
             if [ ! -f "${DB}.tar.gz" ]; then
@@ -55,7 +54,7 @@ jobs:
             # 解压文件
             echo "正在解压 ${DB}.tar.gz..."
             tar -zxvf "${DB}.tar.gz"
-            UNPACK_DIR=$(ls -d ${DB}_* | head -n1)  # 获取解压后的目录名
+            UNPACK_DIR=$(ls -d ${DB}_* | head -n1)
 
             # 检查解压目录是否存在
             if [ -z "$UNPACK_DIR" ]; then
@@ -84,39 +83,44 @@ jobs:
 
     - name: 自动更新 README.md
       run: |
-        # 生成README.md内容（可按需自定义固定内容和动态内容）
+        # 修复README.md的缩进问题（原EOF内的内容有多余缩进）
         cat > README.md << EOF
-          # GeoLite.mmdb 数据库仓库
-          本仓库自动同步 MaxMind 官方的 GeoLite2 数据库，包含 ASN、国家、城市地理信息。
-          
-          ## 📅 最新更新时间
-          ${{ env.TAG_NAME }}
-          
-          ## 📁 包含的数据库文件
-          共 ${MMDB_COUNT} 个文件：${MMDB_FILES}
-          
-          ## 🚀 下载方式
-          1. **Release 页面**：[最新版本](https://github.com/${{ github.repository }}/releases/tag/latest)
-          2. **直接下载**：
-             - [GeoLite2-ASN.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-ASN.mmdb)
-             - [GeoLite2-Country.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-Country.mmdb)
-          ## ⚙️ 自动更新
-          仓库每 7 天自动从 MaxMind 官网同步最新数据库，并更新 Release 和 \`latest\` 标签。
-          
-          ## 📄 许可证
-          本仓库的数据库文件遵循 MaxMind 官方的 [GeoLite2 许可证](https://www.maxmind.com/en/geoip2-geolite2-license)。
-          EOF
+        # GeoLite.mmdb 数据库仓库
+        本仓库自动同步 MaxMind 官方的 GeoLite2 数据库，包含 ASN 和国家地理信息。
+        
+        ## 📅 最新更新时间
+        ${{ env.TAG_NAME }}
+        
+        ## 📁 包含的数据库文件
+        共 ${MMDB_COUNT} 个文件：${MMDB_FILES}
+        
+        ## 🚀 下载方式
+        1. **Release 页面**：[最新版本](https://github.com/${{ github.repository }}/releases/tag/latest)
+        2. **直接下载**：
+           - [GeoLite2-ASN.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-ASN.mmdb)
+           - [GeoLite2-Country.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-Country.mmdb)
+        
+        ## ⚙️ 自动更新
+        仓库每 7 天自动从 MaxMind 官网同步最新数据库，并更新 Release 和 \`latest\` 标签。
+        
+        ## 📄 许可证
+        本仓库的数据库文件遵循 MaxMind 官方的 [GeoLite2 许可证](https://www.maxmind.com/en/geoip2-geolite2-license)。
+        EOF
+        # 检查README.md是否修改成功
+        cat README.md
 
     - name: 推送更新后的 README.md 到主分支
       run: |
-        # 配置Git用户信息
         git config --global user.name "${{ github.actor }}"
         git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-        # 检查修改
         git add README.md
-        git diff --quiet HEAD README.md || git commit -m "docs: 更新README.md - ${{ env.TAG_NAME }}"
-        # 推送修改（非强制推送，避免覆盖主分支）
-        git push origin main  # 替换为你的仓库主分支（如master）
+        # 避免空提交
+        if ! git diff --quiet HEAD README.md; then
+            git commit -m "docs: 更新README.md - ${{ env.TAG_NAME }}"
+            git push origin main
+        else
+            echo "README.md 无变更，跳过推送"
+        fi
 
     - name: 上传到 Releases 并标记为 Latest
       uses: softprops/action-gh-release@v1
@@ -125,13 +129,50 @@ jobs:
       with:
         tag_name: ${{ env.TAG_NAME }}
         body: "GeoLite.mmdb 数据库更新 - ${{ env.TAG_NAME }}\n共包含 ${{ env.MMDB_COUNT }} 个文件：${{ env.MMDB_FILES }}"
-        files: upload/*.mmdb
-        make_latest: true  # 核心：将该Release标记为仓库的Latest Release
+        文件: upload/*.mmdb
+        make_latest: true  # 将该Release标记为仓库的Latest Release
 
     - name: 清理旧 Releases
       uses: dev-drprasad/delete-older-releases@v0.2.0
       with:
-        keep_latest: 5  # 保留最新5个版本，可按需调整
+        keep_latest: 5
         delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 操作 latest 标签（覆盖为最新版本）
+      run: |
+        # 配置Git用户信息
+        git config --global user.name "${{ github.actor }}"
+        git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+        
+        # 克隆仓库（包含所有标签）
+        git clone --depth=1 --tags "https://${{ github.actor }}:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}" repo
+        cd repo
+        
+        # 等待标签同步（解决GitHub延迟问题）
+        sleep 5
+        git pull --tags
+        
+        # 验证最新版本标签是否存在
+        if ! git tag -l | grep -q "${{ env.TAG_NAME }}"; then
+            echo "错误: 版本标签 ${{ env.TAG_NAME }} 不存在"
+            git tag -l  # 打印所有标签
+            exit 1
+        fi
+        
+        # 删除旧的latest标签
+        git tag -d latest 2>/dev/null || echo "本地无 latest 标签，跳过删除"
+        git push origin :refs/tags/latest 2>/dev/null || echo "远程无 latest 标签，跳过删除"
+        
+        # 基于最新版本标签创建latest标签（轻量标签，无需注释）
+        git tag -f latest ${{ env.TAG_NAME }}
+        # 推送latest标签
+        git push origin latest --force
+        
+        # 验证latest标签指向
+        echo "latest 标签指向的提交："
+        git rev-parse latest
+        echo "最新版本标签指向的提交："
+        git rev-parse ${{ env.TAG_NAME }}
+        echo "成功将 latest 标签关联到 ${{ env.TAG_NAME }}"
