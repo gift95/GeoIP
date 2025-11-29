@@ -35,7 +35,6 @@ jobs:
         DATABASES=(
           "GeoLite2-ASN"
           "GeoLite2-Country"
-          "GeoLite2-City"
         )
         mkdir -p upload
 
@@ -101,7 +100,6 @@ jobs:
           2. **直接下载**：
              - [GeoLite2-ASN.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-ASN.mmdb)
              - [GeoLite2-Country.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-Country.mmdb)
-             - [GeoLite2-City.mmdb](https://github.com/${{ github.repository }}/releases/download/latest/GeoLite2-City.mmdb)
           
           ## ⚙️ 自动更新
           仓库每 7 天自动从 MaxMind 官网同步最新数据库，并更新 Release 和 \`latest\` 标签。
