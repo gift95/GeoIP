@@ -81,6 +81,32 @@ jobs:
         echo "MMDB_FILES=$MMDB_FILES" >> $GITHUB_ENV
         echo "TAG_NAME=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
 
+      # 通过SCP将虚拟机的项目代码上传到服务器的目标目录
+    - name: Upload project via SCP
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        port: ${{ secrets.SSH_PORT }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        # 上传GitHub虚拟机的项目根目录所有文件到服务器目标目录
+        source: "upload/*.mmdb"
+        target: "/opt/1panel/apps/openresty/openresty/www/sites/sh.yxliu.cc/index/OwnUseShell"
+        # 覆盖服务器目标目录的同名文件（默认开启）
+        overwrite: true
+
+    - name: Upload project via SCP
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.SSH1_HOST }}
+        port: ${{ secrets.SSH_PORT }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        # 上传GitHub虚拟机的项目根目录所有文件到服务器目标目录
+        source: "upload/*.mmdb"
+        target: "/opt/1panel/apps/openresty/openresty/www/sites/sh.yxliuchn.uk/index/OwnUseShell"
+        # 覆盖服务器目标目录的同名文件（默认开启）
+        overwrite: true      
     - name: 自动更新 README.md
       run: |
         # 修复README.md的缩进问题（移除多余空格，保证Markdown渲染正常）
