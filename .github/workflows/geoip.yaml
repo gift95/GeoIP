@@ -24,9 +24,18 @@ jobs:
     steps:
     - name: Download GeoLite.mmdb
       run: |
-        wget --content-disposition --user=715750 --password=${{ secrets.LICENSE_KEY }}  "https://download.maxmind.com/geoip/databases/GeoLite2-ASN/download?suffix=tar.gz" | tar zxv
-        wget --content-disposition --user=715750 --password=${{ secrets.LICENSE_KEY }}   "https://download.maxmind.com/geoip/databases/GeoLite2-City/download?suffix=tar.gz" | tar zxv
-        wget --content-disposition --user=715750 --password=${{ secrets.LICENSE_KEY }}  "https://download.maxmind.com/geoip/databases/GeoLite2-Country/download?suffix=tar.gz" | tar zxv
+        wget --content-disposition --user=715750 --password=${{ secrets.LICENSE_KEY }} "https://download.maxmind.com/geoip/databases/GeoLite2-ASN/download?suffix=tar.gz" -O GeoLite2-ASN.tar.gz
+        if [ $? -ne 0 ]; then echo "ASN Download failed!"; exit 1; fi
+        tar zxvf GeoLite2-ASN.tar.gz
+
+        wget --content-disposition --user=715750 --password=${{ secrets.LICENSE_KEY }} "https://download.maxmind.com/geoip/databases/GeoLite2-City/download?suffix=tar.gz" -O GeoLite2-City.tar.gz
+        if [ $? -ne 0 ]; then echo "City Download failed!"; exit 1; fi
+        tar zxvf GeoLite2-City.tar.gz
+
+        wget --content-disposition --user=715750 --password=${{ secrets.LICENSE_KEY }} "https://download.maxmind.com/geoip/databases/GeoLite2-Country/download?suffix=tar.gz" -O GeoLite2-Country.tar.gz
+        if [ $? -ne 0 ]; then echo "Country Download failed!"; exit 1; fi
+        tar zxvf GeoLite2-Country.tar.gz
+
         mkdir -p upload
         cp -v GeoLite*/*.mmdb upload
         echo "TAG_NAME=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
