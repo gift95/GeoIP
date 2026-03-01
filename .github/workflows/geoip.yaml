@@ -28,6 +28,7 @@ jobs:
       with:
         ref: main  # 替换为你的仓库主分支（如master）
         fetch-depth: 1
+
     - name: 下载并解压 GeoLite.mmdb
       run: |
         DATABASES=(
