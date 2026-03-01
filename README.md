@@ -2,7 +2,7 @@
 本仓库自动同步 MaxMind 官方的 GeoLite2 数据库，包含 ASN 和国家地理信息。
 
 ## 📅 最新更新时间
-2026.02.22
+2026.03.01
 
 ## 📁 包含的数据库文件
 共 2 个文件：GeoLite2-ASN.mmdb,GeoLite2-Country.mmdb,
