@@ -82,7 +82,7 @@ jobs:
         echo "TAG_NAME=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
 
       # 通过SCP将虚拟机的项目代码上传到服务器的目标目录
-      - name: Upload project via SCP
+    - name: Upload project via SCP
       uses: appleboy/scp-action@master
       with:
         host: ${{ secrets.SSH1_HOST }}
