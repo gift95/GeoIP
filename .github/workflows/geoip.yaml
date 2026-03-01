@@ -82,20 +82,7 @@ jobs:
         echo "TAG_NAME=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
 
       # 通过SCP将虚拟机的项目代码上传到服务器的目标目录
-    - name: Upload project via SCP
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.SSH_HOST }}
-        port: ${{ secrets.SSH_PORT }}
-        username: ${{ secrets.SSH_USERNAME }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        # 上传GitHub虚拟机的项目根目录所有文件到服务器目标目录
-        source: "upload/*.mmdb"
-        target: "/opt/1panel/apps/openresty/openresty/www/sites/sh.yxliu.cc/index/OwnUseShell"
-        # 覆盖服务器目标目录的同名文件（默认开启）
-        overwrite: true
-
-    - name: Upload project via SCP
+      - name: Upload project via SCP
       uses: appleboy/scp-action@master
       with:
         host: ${{ secrets.SSH1_HOST }}
