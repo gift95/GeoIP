@@ -4,7 +4,7 @@ on:
   repository_dispatch:
   workflow_dispatch:
   schedule:
-    - cron: '0 1 */7 * *'
+    - cron: '0 1 */7 * *'  # 每7天的凌晨1点（UTC）执行
 
 env:
   MAXMIND_USER_ID: "715750"
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: write  # 需要写权限操作标签、Release和推送代码
       
     steps:
     - name: 验证必需工具
@@ -41,6 +41,7 @@ jobs:
       run: |
         mkdir -p ${{ env.UPLOAD_DIR }}
         
+        # 定义重试下载函数
         download_with_retry() {
           local db_name=$1
           local retry=0
@@ -69,6 +70,7 @@ jobs:
           return 1
         }
         
+        # 处理每个数据库
         for db in ${{ env.DB_TYPES }}; do
           echo "📦 处理 $db"
           
@@ -76,46 +78,55 @@ jobs:
             exit 1
           fi
           
+          # 验证文件完整性
           if [ ! -f "${db}.tar.gz" ] || [ ! -s "${db}.tar.gz" ]; then
             echo "❌ ${db}.tar.gz 文件无效"
             exit 1
           fi
           
+          # 解压文件
           if ! tar -xzf "${db}.tar.gz"; then
             echo "❌ 解压 ${db} 失败"
             exit 1
           fi
           
+          # 查找解压目录
           unpack_dir=$(find . -maxdepth 1 -type d -name "${db}_*" | head -n1)
           if [ -z "$unpack_dir" ]; then
             echo "❌ 未找到 ${db} 解压目录"
             exit 1
           fi
           
+          # 复制mmdb文件
           if ! cp -v "${unpack_dir}"/*.mmdb ${{ env.UPLOAD_DIR }}/; then
             echo "❌ 复制 ${db} mmdb文件失败"
             exit 1
           fi
           
+          # 清理临时文件
           rm -rf "${unpack_dir}" "${db}.tar.gz"
           echo "✅ $db 处理完成"
         done
         
+        # 验证mmdb文件
         mmdb_files=$(ls -1 ${{ env.UPLOAD_DIR }}/*.mmdb 2>/dev/null)
         if [ -z "$mmdb_files" ]; then
           echo "❌ 未找到任何mmdb文件"
           exit 1
         fi
         
+        # 统计文件信息
         mmdb_count=$(echo "$mmdb_files" | wc -l)
         mmdb_names=$(echo "$mmdb_files" | xargs -n1 basename | tr '\n' ' ')
         tag_name=$(date +"%Y.%m.%d")
         
+        # 设置环境变量供后续步骤使用
         echo "MMDB_COUNT=$mmdb_count" >> $GITHUB_ENV
         echo "MMDB_NAMES=$mmdb_names" >> $GITHUB_ENV
         echo "TAG_NAME=$tag_name" >> $GITHUB_ENV
         
-        echo "📋 生成的文件："
+        # 输出文件校验信息
+        echo "📋 生成的文件校验信息："
         for file in ${{ env.UPLOAD_DIR }}/*.mmdb; do
           echo "  $(basename $file): $(sha256sum $file | cut -d' ' -f1)"
         done
@@ -126,6 +137,7 @@ jobs:
         echo "🧹 清理旧的 latest Release..."
         
         # 获取所有 latest releases（包括草稿）
+        export GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
         gh release list --limit 100 | grep "latest" | while read -r line; do
           release_name=$(echo "$line" | awk '{print $1}')
           if [ "$release_name" = "latest" ]; then
@@ -141,6 +153,19 @@ jobs:
         echo "✅ 清理完成"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 上传到服务器
+      if: success()
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        port: ${{ secrets.SSH_PORT }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        source: "${{ env.UPLOAD_DIR }}/*.mmdb"
+        target: "/opt/1panel/apps/openresty/openresty/www/sites/sh.yxliuchn.uk/index/OwnUseShell"
+        overwrite: true
+        strip_components: 0
 
     - name: 生成并提交 README.md
       run: |
@@ -204,10 +229,13 @@ jobs:
         本仓库的数据库文件遵循 MaxMind 官方的 [GeoLite2 最终用户许可协议](https://www.maxmind.com/en/geolite2/eula)。
         EOF
         
+        # 检查README.md是否有变化
         if ! git diff --quiet README.md; then
           git add README.md
           git commit -m "docs: 更新数据库信息 - ${{ env.TAG_NAME }}"
           git push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git main
+        else
+          echo "ℹ️ README.md 无变更，跳过提交"
         fi
 
     - name: 创建日期版本 Release
@@ -236,13 +264,13 @@ jobs:
       run: |
         echo "📦 创建 latest Release..."
         
-        # 确保 latest 标签指向最新版本
-        git tag -f latest ${{ env.TAG_NAME }}
-        git push origin latest --force
+        # 显式设置认证令牌
+        export GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
         
-        # 使用 GitHub CLI 创建 Release
+        # 使用 gh 命令创建 Release（它会自动处理 latest 标签的创建和更新）
         gh release create latest \
           upload/*.mmdb \
+          --repo "${{ github.repository }}" \
           --title "🚀 最新版本数据库 - ${{ env.TAG_NAME }}" \
           --notes "## 📦 当前版本：${{ env.TAG_NAME }}
 
@@ -251,7 +279,7 @@ jobs:
           - ${{ env.MMDB_NAMES }}
           
           ### 💡 使用说明
-          点击下方"Assets"下载对应的 \`.mmdb\` 文件。
+          点击下方\"Assets\"下载对应的 \`.mmdb\` 文件。
           
           ### 📅 更新时间
           ${{ env.TAG_NAME }}
@@ -261,8 +289,8 @@ jobs:
                     --latest \
                     --draft=false \
                     --prerelease=false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: 清理旧版本（保留最新5个）
       if: success()
