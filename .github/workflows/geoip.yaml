@@ -142,19 +142,6 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: 上传到服务器
-      if: success()
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.SSH_HOST }}
-        port: ${{ secrets.SSH_PORT }}
-        username: ${{ secrets.SSH_USERNAME }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        source: "${{ env.UPLOAD_DIR }}/*.mmdb"
-        target: "/opt/1panel/apps/openresty/openresty/www/sites/sh.yxliuchn.uk/index/OwnUseShell"
-        overwrite: true
-        strip_components: 0
-
     - name: 生成并提交 README.md
       run: |
         git config --global user.name "${{ github.actor }}"
