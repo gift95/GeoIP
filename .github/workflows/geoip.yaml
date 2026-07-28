@@ -8,7 +8,7 @@ on:
 
 env:
   MAXMIND_USER_ID: "715750"
-  DB_TYPES: "GeoLite2-ASN GeoLite2-Country"
+  DB_TYPES: "GeoLite2-ASN GeoLite2-Country GeoLite-City"
   UPLOAD_DIR: "upload"
   RETRY_COUNT: 3
   KEEP_RELEASES: 5
