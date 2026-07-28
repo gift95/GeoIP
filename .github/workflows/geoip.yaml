@@ -8,7 +8,7 @@ on:
 
 env:
   MAXMIND_USER_ID: "715750"
-  DB_TYPES: "GeoLite2-ASN GeoLite2-Country GeoLite2-City"
+  DB_TYPES: "GeoLite2-ASN GeoLite2-Country"
   UPLOAD_DIR: "upload"
   RETRY_COUNT: 3
   KEEP_RELEASES: 5
@@ -21,16 +21,6 @@ jobs:
       contents: write
       
     steps:
-    - name: 验证必需工具
-      run: |
-        for tool in wget tar git curl gh; do
-          if ! command -v $tool &> /dev/null; then
-            echo "❌ 未安装 $tool"
-            exit 1
-          fi
-        done
-        echo "✅ 所有必需工具已安装"
-
     - name: 克隆仓库
       uses: actions/checkout@v4
       with:
