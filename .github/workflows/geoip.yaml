@@ -4,20 +4,21 @@ on:
   repository_dispatch:
   workflow_dispatch:
   schedule:
-    - cron: '0 1 */7 * *'  # 每7天的凌晨1点（UTC）执行
+    - cron: '0 1 */7 * *'
 
 env:
   MAXMIND_USER_ID: "715750"
   DB_TYPES: "GeoLite2-ASN GeoLite2-Country"
   UPLOAD_DIR: "upload"
   RETRY_COUNT: 3
+  KEEP_RELEASES: 5
 
 jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write  # 需要写权限操作标签、Release和推送代码
+      contents: write
       
     steps:
     - name: 验证必需工具
@@ -29,6 +30,7 @@ jobs:
           fi
         done
         echo "✅ 所有必需工具已安装"
+        echo "🔍 GH_TOKEN 是否设置: ${{ secrets.GITHUB_TOKEN != '' && '是' || '否' }}"
 
     - name: 克隆仓库
       uses: actions/checkout@v4
@@ -38,10 +40,17 @@ jobs:
 
     - name: 下载并解压数据库
       id: download
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         mkdir -p ${{ env.UPLOAD_DIR }}
         
-        # 定义重试下载函数
+        # 验证 License Key
+        if [ -z "${{ secrets.LICENSE_KEY }}" ]; then
+          echo "❌ 未设置 LICENSE_KEY 密钥"
+          exit 1
+        fi
+        
         download_with_retry() {
           local db_name=$1
           local retry=0
@@ -55,7 +64,8 @@ jobs:
                    "https://download.maxmind.com/geoip/databases/$db_name/download?suffix=tar.gz" \
                    -O "${db_name}.tar.gz" \
                    --tries=3 \
-                   --timeout=30; then
+                   --timeout=30 \
+                   --progress=bar:force 2>&1; then
               return 0
             fi
             
@@ -120,7 +130,7 @@ jobs:
         mmdb_names=$(echo "$mmdb_files" | xargs -n1 basename | tr '\n' ' ')
         tag_name=$(date +"%Y.%m.%d")
         
-        # 设置环境变量供后续步骤使用
+        # 设置环境变量
         echo "MMDB_COUNT=$mmdb_count" >> $GITHUB_ENV
         echo "MMDB_NAMES=$mmdb_names" >> $GITHUB_ENV
         echo "TAG_NAME=$tag_name" >> $GITHUB_ENV
@@ -133,35 +143,34 @@ jobs:
 
     - name: 清理旧的 latest Release
       if: success()
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         echo "🧹 清理旧的 latest Release..."
         
-        # 获取所有 latest releases（包括草稿）
-        export GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
-        gh release list --limit 100 | grep "latest" | while read -r line; do
-          release_name=$(echo "$line" | awk '{print $1}')
-          if [ "$release_name" = "latest" ]; then
-            echo "  删除旧的 Release: $release_name"
-            gh release delete "$release_name" --yes || echo "  删除失败，继续..."
-          fi
-        done
+        # 使用更精确的匹配
+        if gh release view latest --repo "${{ github.repository }}" 2>/dev/null; then
+          echo "  删除旧的 Release: latest"
+          gh release delete latest --yes --repo "${{ github.repository }}" || echo "  删除失败，继续..."
+        else
+          echo "  latest Release 不存在，跳过删除"
+        fi
         
-        # 清理空的 latest 标签（如果有）
+        # 清理空的 latest 标签
         git tag -d latest 2>/dev/null || echo "本地无 latest 标签"
         git push origin :refs/tags/latest 2>/dev/null || echo "远程无 latest 标签"
         
         echo "✅ 清理完成"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 
     - name: 生成并提交 README.md
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         git config --global user.name "${{ github.actor }}"
         git config --global user.email "${{ github.actor }}@users.noreply.github.com"
         
-        cat > README.md << EOF
-        # GeoLite.mmdb 数据库仓库
+        cat > README.md << 'EOF'
+        # 🌍 GeoLite.mmdb 数据库仓库
         
         本仓库自动同步 [MaxMind](https://www.maxmind.com) 官方的 GeoLite2 数据库。
         
@@ -192,111 +201,12 @@ jobs:
         2. 验证文件完整性和有效性
         3. 创建带日期标签的新 Release
         4. 更新 \`latest\` 标签指向最新版本
-        5. 保留最近5个版本，自动清理旧版本
+        5. 保留最近 ${{ env.KEEP_RELEASES }} 个版本，自动清理旧版本
         
         ## ⚙️ 使用示例
         
         ### Nginx
-        \`\`\`nginx
+        ```nginx
         geoip2 /path/to/GeoLite2-Country.mmdb {
             \$geoip2_country_code country iso_code;
         }
-        \`\`\`
-        
-        ### Python
-        \`\`\`python
-        import geoip2.database
-        
-        reader = geoip2.database.Reader('GeoLite2-Country.mmdb')
-        response = reader.country('8.8.8.8')
-        print(response.country.iso_code)
-        \`\`\`
-        
-        ## 📄 许可证
-        
-        本仓库的数据库文件遵循 MaxMind 官方的 [GeoLite2 最终用户许可协议](https://www.maxmind.com/en/geolite2/eula)。
-        EOF
-        
-        # 检查README.md是否有变化
-        if ! git diff --quiet README.md; then
-          git add README.md
-          git commit -m "docs: 更新数据库信息 - ${{ env.TAG_NAME }}"
-          git push https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git main
-        else
-          echo "ℹ️ README.md 无变更，跳过提交"
-        fi
-
-    - name: 创建日期版本 Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ env.TAG_NAME }}
-        body: |
-          ## 🗓️ 数据库更新 - ${{ env.TAG_NAME }}
-          
-          ### 📊 包含文件
-          - 共计 **${{ env.MMDB_COUNT }}** 个数据库文件
-          - 文件列表：${{ env.MMDB_NAMES }}
-          
-          ### 📅 更新说明
-          - 自动同步于 ${{ env.TAG_NAME }}
-          - 数据来源：MaxMind GeoLite2
-        files: upload/*.mmdb
-        make_latest: false
-        prerelease: false
-        draft: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: 创建最新的 latest Release
-      if: success()
-      run: |
-        echo "📦 创建 latest Release..."
-        
-        # 显式设置认证令牌
-        export GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
-        
-        # 使用 gh 命令创建 Release（它会自动处理 latest 标签的创建和更新）
-        gh release create latest \
-          upload/*.mmdb \
-          --repo "${{ github.repository }}" \
-          --title "🚀 最新版本数据库 - ${{ env.TAG_NAME }}" \
-          --notes "## 📦 当前版本：${{ env.TAG_NAME }}
-
-          **包含文件：**
-          - 共 **${{ env.MMDB_COUNT }}** 个数据库文件
-          - ${{ env.MMDB_NAMES }}
-          
-          ### 💡 使用说明
-          点击下方\"Assets\"下载对应的 \`.mmdb\` 文件。
-          
-          ### 📅 更新时间
-          ${{ env.TAG_NAME }}
-          
-          ### 🔗 历史版本
-          查看 [Releases](https://github.com/${{ github.repository }}/releases) 页面获取所有历史版本。" \
-                    --latest \
-                    --draft=false \
-                    --prerelease=false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: 清理旧版本（保留最新5个）
-      if: success()
-      uses: dev-drprasad/delete-older-releases@v0.3.4
-      with:
-        keep_latest: 5
-        delete_tags: true
-        delete_older_only: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: 验证结果
-      run: |
-        echo "📊 执行结果摘要："
-        echo "  - 日期版本标签: ${{ env.TAG_NAME }}"
-        echo "  - 最新版本标签: latest"
-        echo "  - 文件数: ${{ env.MMDB_COUNT }}"
-        echo "  - 文件列表: ${{ env.MMDB_NAMES }}"
-        echo ""
-        echo "✅ 工作流执行成功！"
-        echo "🌐 查看结果: https://github.com/${{ github.repository }}/releases"
